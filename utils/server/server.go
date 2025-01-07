@@ -1,11 +1,17 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"time"
+)
+
+const (
+	broadcastPort = ":9999" // Port for broadcasting
 )
 
 func ReceiveFile(conn net.Conn) error {
@@ -35,16 +41,44 @@ func ReceiveFile(conn net.Conn) error {
 	return nil
 }
 
-func GetLocalIP() (string, error) {
-	// Get the local IP address of the machine
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+func ListenForBroadCasts(ctx context.Context) error {
+	addr, err := net.ResolveUDPAddr("udp", broadcastPort)
 	if err != nil {
-		return "", err
+		fmt.Println("Error resolving address:", err)
+		return err
+	}
+
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		fmt.Println("Error listening for broadcast:", err)
+		return err
 	}
 	defer conn.Close()
 
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String(), nil
+	fmt.Println("Listening for broadcasts on", broadcastPort)
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Listener stopped.")
+			return nil
+		default:
+			buffer := make([]byte, 1024)
+			conn.SetReadDeadline(time.Now().Add(1 * time.Second)) // Set timeout
+			n, remoteAddr, err := conn.ReadFromUDP(buffer)
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					// Timeout reached, continue checking for ctx.Done()
+					continue
+				}
+				fmt.Println("Error reading from UDP:", err)
+				continue
+			}
+
+			fmt.Printf("Received message: %s from %s\n", string(buffer[:n]), remoteAddr)
+		}
+	}
+
 }
 
 func StartServer() {

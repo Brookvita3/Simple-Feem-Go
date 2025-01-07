@@ -1,10 +1,15 @@
 package client
 
 import (
+	"file-transfer/utils/utils"
 	"fmt"
 	"io"
 	"net"
 	"os"
+)
+
+const (
+	broadcastPort = ":9999" // Port for broadcasting
 )
 
 func SendFile(filePath string, conn net.Conn) error {
@@ -24,17 +29,35 @@ func SendFile(filePath string, conn net.Conn) error {
 	return nil
 }
 
-func getFreePort() (int, error) {
-	// Create a temporary listener on port 0, which tells the OS to find an available port.
-	listener, err := net.Listen("tcp", "localhost:0")
+// sendBroadcast sends a UDP broadcast message
+func SendBroadCasts() error {
+	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255"+broadcastPort)
 	if err != nil {
-		return 0, fmt.Errorf("could not find a free port: %v", err)
+		fmt.Println("Error resolving broadcast address:", err)
+		return err
 	}
-	defer listener.Close()
 
-	// Retrieve the address of the listener and extract the port number.
-	addr := listener.Addr().(*net.TCPAddr)
-	return addr.Port, nil
+	conn, err := net.DialUDP("udp", nil, broadcastAddr)
+	if err != nil {
+		fmt.Println("Error creating UDP connection:", err)
+		return err
+	}
+	defer conn.Close()
+
+	message, err := utils.GetLocalIP()
+	if err != nil {
+		fmt.Println("Error getting local IP:", err)
+		return err
+	}
+
+	_, err = conn.Write([]byte(message))
+	if err != nil {
+		fmt.Println("Error sending broadcast message:", err)
+		return err
+	}
+
+	fmt.Println("Broadcast message sent:", message)
+	return nil
 }
 
 func StartClient(addr string) {
