@@ -15,5 +15,6 @@ func main() {
 	}
 
 	client.SendBroadCasts()
+
 	client.StartClient(addr)
 }

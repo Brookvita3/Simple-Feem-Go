@@ -2,17 +2,53 @@ package server
 
 import (
 	"context"
+	config "file-transfer/configs"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
-const (
-	broadcastPort = ":9999" // Port for broadcasting
-)
+func receiveChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- error) {
+	defer conn.Close()
+
+	chunkSize := config.Config.CHUNK_SIZE
+	buffer := make([]byte, chunkSize)
+	for {
+		n, err := conn.Read(buffer)
+		if n > 0 {
+			dataChan <- buffer[:n]
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			errorChan <- fmt.Errorf("error receiving chunk: %v", err)
+			break
+		}
+	}
+	close(dataChan) // Close the channel when done
+}
+
+func writeFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- error) {
+	file, err := os.Create(filePath)
+	if err != nil {
+		errorChan <- fmt.Errorf("error creating file: %v", err)
+		return
+	}
+	defer file.Close()
+
+	for chunk := range dataChan {
+		_, err := file.Write(chunk)
+		if err != nil {
+			errorChan <- fmt.Errorf("error writing to file: %v", err)
+			break
+		}
+	}
+}
 
 func ReceiveFile(conn net.Conn) error {
 	// Define the path to save the received file in the receive folder
@@ -42,7 +78,7 @@ func ReceiveFile(conn net.Conn) error {
 }
 
 func ListenForBroadCasts(ctx context.Context) error {
-	addr, err := net.ResolveUDPAddr("udp", broadcastPort)
+	addr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(config.Config.BROADCAST_PORT))
 	if err != nil {
 		fmt.Println("Error resolving address:", err)
 		return err
@@ -55,7 +91,7 @@ func ListenForBroadCasts(ctx context.Context) error {
 	}
 	defer conn.Close()
 
-	fmt.Println("Listening for broadcasts on", broadcastPort)
+	fmt.Println("Listening for broadcasts on", config.Config.BROADCAST_PORT)
 
 	for {
 		select {

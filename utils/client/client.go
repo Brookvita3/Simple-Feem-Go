@@ -1,17 +1,52 @@
 package client
 
 import (
+	config "file-transfer/configs"
 	"file-transfer/utils/utils"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"strconv"
 )
 
-const (
-	broadcastPort = ":9999" // Port for broadcasting
-)
+func ReadFile(filePath string, dataChan chan<- []byte, errorChan chan<- error) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
 
+	buffer := make([]byte, config.Config.CHUNK_SIZE)
+	for {
+		n, err := file.Read(buffer)
+		if n > 0 {
+			dataChan <- buffer[:n] // Send chunk to data channel
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			errorChan <- fmt.Errorf("error reading file: %v", err)
+			break
+		}
+	}
+	return nil
+
+}
+
+func SendChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) {
+	defer conn.Close()
+	for chunk := range dataChan {
+		_, err := conn.Write(chunk)
+		if err != nil {
+			errorChan <- fmt.Errorf("error sending chunk: %v", err)
+			break
+		}
+	}
+}
+
+// TODO: break file to chunk, use goroutine to handle send and receive
 func SendFile(filePath string, conn net.Conn) error {
 	// Open the file to send
 	file, err := os.Open(filePath)
@@ -19,6 +54,19 @@ func SendFile(filePath string, conn net.Conn) error {
 		return fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
+
+	// Get file info
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("error getting file info: %v", err)
+	}
+
+	// Send metadata: filename and size
+	metadata := fmt.Sprintf("%s:%d\n", fileInfo.Name(), fileInfo.Size())
+	_, err = conn.Write([]byte(metadata))
+	if err != nil {
+		return fmt.Errorf("error sending metadata: %v", err)
+	}
 
 	// Send the file to the server
 	_, err = io.Copy(conn, file)
@@ -31,7 +79,7 @@ func SendFile(filePath string, conn net.Conn) error {
 
 // sendBroadcast sends a UDP broadcast message
 func SendBroadCasts() error {
-	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255"+broadcastPort)
+	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:"+strconv.Itoa(config.Config.BROADCAST_PORT))
 	if err != nil {
 		fmt.Println("Error resolving broadcast address:", err)
 		return err
