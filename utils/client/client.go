@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-func ReadFile(filePath string, dataChan chan<- []byte, errorChan chan<- error) error {
+func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- error) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("error opening file: %v", err)
@@ -31,11 +31,13 @@ func ReadFile(filePath string, dataChan chan<- []byte, errorChan chan<- error) e
 			break
 		}
 	}
+	fmt.Printf("Read Successfully")
+	close(dataChan)
 	return nil
 
 }
 
-func SendChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) {
+func SendFileChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) error {
 	defer conn.Close()
 	for chunk := range dataChan {
 		_, err := conn.Write(chunk)
@@ -44,42 +46,15 @@ func SendChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) {
 			break
 		}
 	}
-}
-
-// TODO: break file to chunk, use goroutine to handle send and receive
-func SendFile(filePath string, conn net.Conn) error {
-	// Open the file to send
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
-
-	// Get file info
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("error getting file info: %v", err)
-	}
-
-	// Send metadata: filename and size
-	metadata := fmt.Sprintf("%s:%d\n", fileInfo.Name(), fileInfo.Size())
-	_, err = conn.Write([]byte(metadata))
-	if err != nil {
-		return fmt.Errorf("error sending metadata: %v", err)
-	}
-
-	// Send the file to the server
-	_, err = io.Copy(conn, file)
-	if err != nil {
-		return fmt.Errorf("error sending file: %v", err)
-	}
-
+	fmt.Printf("Send Successfully")
+	close(errorChan)
 	return nil
 }
 
 // sendBroadcast sends a UDP broadcast message
 func SendBroadCasts() error {
 	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:"+strconv.Itoa(config.Config.BROADCAST_PORT))
+	fmt.Println("255.255.255.255:" + strconv.Itoa(config.Config.BROADCAST_PORT))
 	if err != nil {
 		fmt.Println("Error resolving broadcast address:", err)
 		return err
@@ -125,10 +100,27 @@ func StartClient(addr string) {
 	}
 	fmt.Println(string(buffer))
 
-	// Specify the file path to send
+	// example send file
 	path := "../../files/send/file1.pdf"
-	err = SendFile(path, conn)
-	if err != nil {
-		fmt.Println("Error sending file:", err)
+	dataChan := make(chan []byte)
+	errorChan := make(chan error)
+
+	go func() {
+		err := ReadFileChunks(path, dataChan, errorChan)
+		if err != nil {
+			fmt.Println("Error reading file:", err)
+		}
+	}()
+
+	go func() {
+		err := SendFileChunks(conn, dataChan, errorChan)
+		if err != nil {
+			fmt.Println("Error sending file:", err)
+		}
+	}()
+
+	for err := range errorChan {
+		fmt.Println("Error:", err)
 	}
+
 }

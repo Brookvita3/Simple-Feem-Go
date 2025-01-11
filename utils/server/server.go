@@ -7,12 +7,11 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
 
-func receiveChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- error) {
+func ReceiveFileChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- error) {
 	defer conn.Close()
 
 	chunkSize := config.Config.CHUNK_SIZE
@@ -33,7 +32,7 @@ func receiveChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- error
 	close(dataChan) // Close the channel when done
 }
 
-func writeFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- error) {
+func WriteFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- error) {
 	file, err := os.Create(filePath)
 	if err != nil {
 		errorChan <- fmt.Errorf("error creating file: %v", err)
@@ -48,33 +47,6 @@ func writeFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- e
 			break
 		}
 	}
-}
-
-func ReceiveFile(conn net.Conn) error {
-	// Define the path to save the received file in the receive folder
-	path := "../../files/receive"
-	err := os.MkdirAll(path, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("error creating receive directory: %v", err)
-	}
-
-	// Open a new file to save the received data
-	receivedFilePath := filepath.Join(path, "file_received.pdf")
-	file, err := os.Create(receivedFilePath)
-	if err != nil {
-		return fmt.Errorf("error creating file: %v", err)
-	}
-	defer file.Close()
-
-	// Copy the data from the connection into the file
-	_, err = io.Copy(file, conn)
-	if err != nil {
-		return fmt.Errorf("error saving received file: %v", err)
-	}
-
-	// File received and saved successfully
-	fmt.Println("File received and saved successfully!")
-	return nil
 }
 
 func ListenForBroadCasts(ctx context.Context) error {
@@ -100,7 +72,7 @@ func ListenForBroadCasts(ctx context.Context) error {
 			return nil
 		default:
 			buffer := make([]byte, 1024)
-			conn.SetReadDeadline(time.Now().Add(1 * time.Second)) // Set timeout
+			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
 			n, remoteAddr, err := conn.ReadFromUDP(buffer)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -118,6 +90,7 @@ func ListenForBroadCasts(ctx context.Context) error {
 }
 
 func StartServer() {
+
 	// Listen for incoming connections
 	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
@@ -136,13 +109,19 @@ func StartServer() {
 			break
 		}
 
-		// Handle the file reception
 		conn.Write([]byte("Welcome to the server!\n"))
 
-		err = ReceiveFile(conn)
-		if err != nil {
-			fmt.Println("Error receiving file:", err)
+		path := "../../files/receive/file1.pdf"
+		dataChan := make(chan []byte)
+		errorChan := make(chan error)
+
+		go ReceiveFileChunks(conn, dataChan, errorChan)
+		go WriteFileChunks(path, dataChan, errorChan)
+
+		// Monitor for errors
+		for err := range errorChan {
+			fmt.Printf("Error: %v\n", err)
 		}
-		conn.Close()
+
 	}
 }
