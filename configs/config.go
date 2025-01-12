@@ -1,21 +1,20 @@
 package config
 
 import (
+	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"strconv"
-
-	"github.com/joho/godotenv"
 )
 
 type AppConfig struct {
 	CHUNK_SIZE     int
-	BROADCAST_PORT int
+	BROADCAST_PORT string
 }
 
 var Config AppConfig
 
-func NewConfig(CHUNK_SIZE int, BROADCAST_PORT int) *AppConfig {
+func NewConfig(CHUNK_SIZE int, BROADCAST_PORT string) *AppConfig {
 	return &AppConfig{
 		CHUNK_SIZE:     CHUNK_SIZE,
 		BROADCAST_PORT: BROADCAST_PORT,
@@ -40,6 +39,6 @@ func LoadEnv() {
 
 	Config = AppConfig{
 		CHUNK_SIZE:     int(chunkSize),
-		BROADCAST_PORT: int(broadcastPort),
+		BROADCAST_PORT: strconv.FormatInt(broadcastPort, 10),
 	}
 }
