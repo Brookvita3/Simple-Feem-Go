@@ -1,6 +1,7 @@
-package client
+package clientUtils
 
 import (
+	"bufio"
 	config "file-transfer/configs"
 	"file-transfer/utils/utils"
 	"fmt"
@@ -10,43 +11,40 @@ import (
 	"strconv"
 )
 
-func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- error) {
+func ReadFileChunks(filePath string, fileChannels utils.FileChannels, chunkSize int) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		errorChan <- fmt.Errorf("error opening file: %v", err)
+		fileChannels.ErrorChan <- err
 		return
 	}
 	defer file.Close()
 
-	buffer := make([]byte, config.Config.CHUNK_SIZE)
+	reader := bufio.NewReaderSize(file, chunkSize)
 	for {
-		n, err := file.Read(buffer)
-		if n > 0 {
-			dataChan <- buffer[:n]
-		}
+		err := fileChannels.SendChunk(reader, chunkSize)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			errorChan <- fmt.Errorf("error reading file: %v", err)
-			break
+			fileChannels.ErrorChan <- err
+			return
 		}
 	}
-	fmt.Println("Read Successfully")
-	close(dataChan)
+	close(fileChannels.DataChan)
 }
 
-func SendFileChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) {
+func SendFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
 	defer conn.Close()
-	for chunk := range dataChan {
+	for chunk := range fileChannels.DataChan {
 		_, err := conn.Write(chunk)
 		if err != nil {
-			errorChan <- fmt.Errorf("error sending chunk: %v", err)
+			fileChannels.ErrorChan <- err
+			fmt.Printf("error sending chunk: %v\n", err)
 			break
 		}
 	}
 	fmt.Println("Send Successfully")
-	close(errorChan)
+	close(fileChannels.ErrorChan)
 }
 
 // sendBroadcast sends a UDP broadcast message
@@ -100,14 +98,13 @@ func StartClient(addr string) {
 
 	// example send file
 	path := "../../files/send/file1.pdf"
-	dataChan := make(chan []byte)
-	errorChan := make(chan error)
 
-	go ReadFileChunks(path, dataChan, errorChan)
-	go SendFileChunks(conn, dataChan, errorChan)
+	fileChannels := *utils.NewFileChannels(
+		make(chan []byte),
+		make(chan error),
+	)
 
-	for err := range errorChan {
-		fmt.Println("Error:", err)
-	}
+	go ReadFileChunks(path, fileChannels, config.Config.CHUNK_SIZE)
+	go SendFileChunks(conn, fileChannels)
 
 }

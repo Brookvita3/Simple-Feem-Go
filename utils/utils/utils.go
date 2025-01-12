@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -33,5 +34,32 @@ func ClearScreen() {
 	err := cmd.Run()
 	if err != nil {
 		fmt.Println("Error clearing screen:", err)
+	}
+}
+
+func GetInput() string {
+	var input string
+	fmt.Scanln(&input)
+	return input
+}
+
+type FileChannels struct {
+	DataChan  chan []byte
+	ErrorChan chan error
+}
+
+func (fileChannels *FileChannels) SendChunk(reader *bufio.Reader, chunkSize int) error {
+	chunk := make([]byte, chunkSize)
+	n, err := reader.Read(chunk)
+	if n > 0 {
+		fileChannels.DataChan <- chunk[:n]
+	}
+	return err
+}
+
+func NewFileChannels(dataChan chan []byte, errorChan chan error) *FileChannels {
+	return &FileChannels{
+		DataChan:  dataChan,
+		ErrorChan: errorChan,
 	}
 }

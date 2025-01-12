@@ -15,6 +15,13 @@ type AppConfig struct {
 
 var Config AppConfig
 
+func NewConfig(CHUNK_SIZE int, BROADCAST_PORT int) *AppConfig {
+	return &AppConfig{
+		CHUNK_SIZE:     CHUNK_SIZE,
+		BROADCAST_PORT: BROADCAST_PORT,
+	}
+}
+
 func LoadEnv() {
 	err := godotenv.Load("../.env")
 	if err != nil {
