@@ -29,6 +29,7 @@ func ReceiveFileChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- e
 			break
 		}
 	}
+	fmt.Println("Receive Successfully")
 	close(dataChan) // Close the channel when done
 }
 
@@ -47,6 +48,7 @@ func WriteFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- e
 			break
 		}
 	}
+	fmt.Println("Write Successfully")
 }
 
 func ListenForBroadCasts(ctx context.Context) error {
@@ -124,4 +126,10 @@ func StartServer() {
 		}
 
 	}
+}
+
+func ShutdownServer(cancel context.CancelFunc) {
+	fmt.Println("Shutting down the server...")
+	cancel()
+	fmt.Println("Server has been shut down gracefully.")
 }

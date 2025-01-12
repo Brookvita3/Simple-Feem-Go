@@ -10,10 +10,11 @@ import (
 	"strconv"
 )
 
-func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- error) error {
+func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("error opening file: %v", err)
+		errorChan <- fmt.Errorf("error opening file: %v", err)
+		return
 	}
 	defer file.Close()
 
@@ -21,7 +22,7 @@ func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- er
 	for {
 		n, err := file.Read(buffer)
 		if n > 0 {
-			dataChan <- buffer[:n] // Send chunk to data channel
+			dataChan <- buffer[:n]
 		}
 		if err == io.EOF {
 			break
@@ -31,13 +32,11 @@ func ReadFileChunks(filePath string, dataChan chan<- []byte, errorChan chan<- er
 			break
 		}
 	}
-	fmt.Printf("Read Successfully")
+	fmt.Println("Read Successfully")
 	close(dataChan)
-	return nil
-
 }
 
-func SendFileChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) error {
+func SendFileChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- error) {
 	defer conn.Close()
 	for chunk := range dataChan {
 		_, err := conn.Write(chunk)
@@ -46,9 +45,8 @@ func SendFileChunks(conn net.Conn, dataChan <-chan []byte, errorChan chan<- erro
 			break
 		}
 	}
-	fmt.Printf("Send Successfully")
+	fmt.Println("Send Successfully")
 	close(errorChan)
-	return nil
 }
 
 // sendBroadcast sends a UDP broadcast message
@@ -105,19 +103,8 @@ func StartClient(addr string) {
 	dataChan := make(chan []byte)
 	errorChan := make(chan error)
 
-	go func() {
-		err := ReadFileChunks(path, dataChan, errorChan)
-		if err != nil {
-			fmt.Println("Error reading file:", err)
-		}
-	}()
-
-	go func() {
-		err := SendFileChunks(conn, dataChan, errorChan)
-		if err != nil {
-			fmt.Println("Error sending file:", err)
-		}
-	}()
+	go ReadFileChunks(path, dataChan, errorChan)
+	go SendFileChunks(conn, dataChan, errorChan)
 
 	for err := range errorChan {
 		fmt.Println("Error:", err)
