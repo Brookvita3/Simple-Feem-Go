@@ -8,10 +8,16 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 )
 
 func ReadFileChunks(filePath string, fileChannels utils.FileChannels, chunkSize int) {
+
+	_, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		fileChannels.ErrorChan <- err
+		return
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		fileChannels.ErrorChan <- err
@@ -49,8 +55,8 @@ func SendFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
 
 // sendBroadcast sends a UDP broadcast message
 func SendBroadCasts() error {
-	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:"+strconv.Itoa(config.Config.BROADCAST_PORT))
-	fmt.Println("255.255.255.255:" + strconv.Itoa(config.Config.BROADCAST_PORT))
+	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:"+config.Config.BROADCAST_PORT)
+	fmt.Println("255.255.255.255:" + config.Config.BROADCAST_PORT)
 	if err != nil {
 		fmt.Println("Error resolving broadcast address:", err)
 		return err
@@ -107,4 +113,7 @@ func StartClient(addr string) {
 	go ReadFileChunks(path, fileChannels, config.Config.CHUNK_SIZE)
 	go SendFileChunks(conn, fileChannels)
 
+	for err := range fileChannels.ErrorChan {
+		fmt.Printf("Error: %v\n", err)
+	}
 }
