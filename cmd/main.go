@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"file-transfer/cmd/client"
+	config "file-transfer/configs"
 	"file-transfer/utils/server"
-	utils "file-transfer/utils/utils"
+	"file-transfer/utils/utils"
 	"fmt"
 )
 
@@ -17,6 +18,8 @@ func showMenu() {
 
 func main() {
 
+	config.LoadEnv()
+
 	// logic to start
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -24,12 +27,8 @@ func main() {
 	for {
 		showMenu()
 
-		// Get user input
-		var command string
-		fmt.Print("Enter command number: ")
-		fmt.Scan(&command)
+		command := utils.GetInput()
 
-		// Handle commands
 		switch command {
 		case "1":
 			go server.StartServer()

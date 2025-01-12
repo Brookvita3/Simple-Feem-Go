@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	config "file-transfer/configs"
 	"file-transfer/utils/server"
 	"fmt"
 )
@@ -14,8 +13,6 @@ func showMenu() {
 }
 
 func Main() {
-
-	config.LoadEnv()
 
 	// logic to start
 	ctx, cancel := context.WithCancel(context.Background())

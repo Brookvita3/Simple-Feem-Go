@@ -1,7 +1,6 @@
 package client
 
 import (
-	config "file-transfer/configs"
 	"file-transfer/utils/client"
 	"file-transfer/utils/utils"
 	"fmt"
@@ -14,7 +13,6 @@ func showMenuSendFile() {
 }
 
 func SendFile() {
-	config.LoadEnv()
 
 	// logic to get ip for share
 	addr, err := utils.GetLocalIP()
@@ -26,14 +24,12 @@ func SendFile() {
 	for {
 		showMenuSendFile()
 
-		var sendFileCommand string
-		fmt.Print("Enter command number: ")
-		fmt.Scanln(&sendFileCommand)
+		sendFileCommand := utils.GetInput()
 
 		switch sendFileCommand {
 		case "1":
-			client.SendBroadCasts()
-			client.StartClient(addr)
+			clientUtils.SendBroadCasts()
+			clientUtils.StartClient(addr)
 		case "0":
 			fmt.Println("Returning to main menu...")
 			utils.ClearScreen()
