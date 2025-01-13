@@ -103,7 +103,7 @@ func StartClient(addr string) {
 	fmt.Println(string(buffer))
 
 	// example send file
-	path := "../../files/send/file1.pdf"
+	path := "../files/send/file1.pdf"
 
 	fileChannels := *utils.NewFileChannels(
 		make(chan []byte),

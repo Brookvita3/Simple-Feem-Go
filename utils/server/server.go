@@ -3,48 +3,41 @@ package server
 import (
 	"context"
 	config "file-transfer/configs"
+	"file-transfer/utils/utils"
 	"fmt"
-	"io"
 	"net"
 	"os"
-	"strconv"
 	"time"
 )
 
-func ReceiveFileChunks(conn net.Conn, dataChan chan<- []byte, errorChan chan<- error) {
+func ReceiveFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
 	defer conn.Close()
 
-	chunkSize := config.Config.CHUNK_SIZE
-	buffer := make([]byte, chunkSize)
+	buffer := make([]byte, config.Config.CHUNK_SIZE)
 	for {
 		n, err := conn.Read(buffer)
-		if n > 0 {
-			dataChan <- buffer[:n]
-		}
-		if err == io.EOF {
-			break
-		}
 		if err != nil {
-			errorChan <- fmt.Errorf("error receiving chunk: %v", err)
+			fileChannels.ErrorChan <- err
 			break
 		}
+		fileChannels.DataChan <- buffer[:n]
 	}
-	fmt.Println("Receive Successfully")
-	close(dataChan) // Close the channel when done
+	close(fileChannels.DataChan)
+
 }
 
-func WriteFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- error) {
+func WriteFileChunks(filePath string, fileChannels utils.FileChannels) {
 	file, err := os.Create(filePath)
 	if err != nil {
-		errorChan <- fmt.Errorf("error creating file: %v", err)
+		fileChannels.ErrorChan <- err
 		return
 	}
 	defer file.Close()
 
-	for chunk := range dataChan {
+	for chunk := range fileChannels.DataChan {
 		_, err := file.Write(chunk)
 		if err != nil {
-			errorChan <- fmt.Errorf("error writing to file: %v", err)
+			fileChannels.ErrorChan <- err
 			break
 		}
 	}
@@ -52,7 +45,7 @@ func WriteFileChunks(filePath string, dataChan <-chan []byte, errorChan chan<- e
 }
 
 func ListenForBroadCasts(ctx context.Context) error {
-	addr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(config.Config.BROADCAST_PORT))
+	addr, err := net.ResolveUDPAddr("udp", ":"+config.Config.BROADCAST_PORT)
 	if err != nil {
 		fmt.Println("Error resolving address:", err)
 		return err
@@ -113,15 +106,17 @@ func StartServer() {
 
 		conn.Write([]byte("Welcome to the server!\n"))
 
-		path := "../../files/receive/file1.pdf"
-		dataChan := make(chan []byte)
-		errorChan := make(chan error)
+		path := "../files/receive/file1.pdf"
+		fileChannels := *utils.NewFileChannels(
+			make(chan []byte),
+			make(chan error),
+		)
 
-		go ReceiveFileChunks(conn, dataChan, errorChan)
-		go WriteFileChunks(path, dataChan, errorChan)
+		go ReceiveFileChunks(conn, fileChannels)
+		go WriteFileChunks(path, fileChannels)
 
 		// Monitor for errors
-		for err := range errorChan {
+		for err := range fileChannels.ErrorChan {
 			fmt.Printf("Error: %v\n", err)
 		}
 
