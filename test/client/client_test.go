@@ -3,15 +3,22 @@ package client_test
 
 import (
 	"bytes"
-	config "file-transfer/configs"
 	clientUtils "file-transfer/utils/client"
 	"file-transfer/utils/utils"
-
-	//"net"
+	"net"
 	"os"
 	"testing"
 	"time"
 )
+
+type testCase struct {
+	name       string
+	filePath   string
+	chunkSize  int
+	wantError  bool
+	expected   []byte
+	errorCheck func(err error) bool
+}
 
 func TestReadFileChunks(t *testing.T) {
 
@@ -27,14 +34,7 @@ func TestReadFileChunks(t *testing.T) {
 	}
 	tempFile.Close()
 
-	testCases := []struct {
-		name       string
-		filePath   string
-		chunkSize  int
-		wantError  bool
-		expected   []byte
-		errorCheck func(err error) bool
-	}{
+	listTestCase := []testCase{
 		{
 			name:      "valid file read",
 			filePath:  tempFile.Name(),
@@ -53,10 +53,8 @@ func TestReadFileChunks(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range listTestCase {
 		t.Run(tc.name, func(t *testing.T) {
-
-			config.Config.CHUNK_SIZE = tc.chunkSize
 
 			fileChannels := *utils.NewFileChannels(
 				make(chan []byte),
@@ -111,24 +109,54 @@ func TestReadFileChunks(t *testing.T) {
 	}
 }
 
-// func TestSendFileChunks(t *testing.T) {
-// 	conn, err := net.Dial("tcp", "localhost:8081")
-// 	if err != nil {
-// 		t.Fatalf("Error dialing server: %v", err)
-// 	}
-// 	defer conn.Close()
+func TestSendFileChunks(t *testing.T) {
+	content := []byte("This is a test file content")
+	listTestCase := []testCase{
+		{
+			name:      "valid file send",
+			chunkSize: 10,
+			wantError: false,
+			expected:  content,
+		},
+	}
 
-// 	testCases := []struct {
-// 		name       string
-// 		chunkSize  int
-// 		wantError  bool
-// 		errorCheck func(err error) bool
-// 	}{
-// 		{
-// 			name:      "valid chunk send",
-// 			chunkSize: 10,
-// 			wantError: false,
-// 		},
-// 	}
+	for _, tc := range listTestCase {
+		t.Run(tc.name, func(t *testing.T) {
+			var result []byte
+			done := make(chan bool)
 
-// }
+			fileChannels := *utils.NewFileChannels(
+				make(chan []byte, 1),
+				make(chan error),
+			)
+
+			fileChannels.DataChan <- content
+			close(fileChannels.DataChan) // Important to close after sending
+
+			server, client := net.Pipe()
+
+			go func() {
+				buffer := make([]byte, len(content))
+				n, err := server.Read(buffer)
+				if err != nil {
+					t.Errorf("Failed to read: %v", err)
+				}
+				result = append(result, buffer[:n]...)
+				server.Close()
+				done <- true
+			}()
+
+			go clientUtils.SendFileChunks(client, fileChannels)
+
+			// Wait for completion
+			select {
+			case <-done:
+				if !bytes.Equal(result, tc.expected) {
+					t.Errorf("expected %s, got %s", string(tc.expected), string(result))
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("Test timed out")
+			}
+		})
+	}
+}
