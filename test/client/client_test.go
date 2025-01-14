@@ -5,6 +5,8 @@ import (
 	"bytes"
 	clientUtils "file-transfer/utils/client"
 	"file-transfer/utils/utils"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"testing"
@@ -59,9 +61,10 @@ func TestReadFileChunks(t *testing.T) {
 			fileChannels := *utils.NewFileChannels(
 				make(chan []byte),
 				make(chan error),
+				tc.chunkSize,
 			)
 
-			go clientUtils.ReadFileChunks(tc.filePath, fileChannels, tc.chunkSize)
+			go clientUtils.ReadFileChunks(tc.filePath, fileChannels)
 
 			var result []byte
 			var receivedError error
@@ -126,8 +129,9 @@ func TestSendFileChunks(t *testing.T) {
 			done := make(chan bool)
 
 			fileChannels := *utils.NewFileChannels(
-				make(chan []byte, 1),
+				make(chan []byte, len(content)/tc.chunkSize),
 				make(chan error),
+				tc.chunkSize,
 			)
 
 			fileChannels.DataChan <- content
@@ -136,13 +140,18 @@ func TestSendFileChunks(t *testing.T) {
 			server, client := net.Pipe()
 
 			go func() {
-				buffer := make([]byte, len(content))
-				n, err := server.Read(buffer)
-				if err != nil {
-					t.Errorf("Failed to read: %v", err)
+				buffer := make([]byte, tc.chunkSize)
+				for {
+					n, err := server.Read(buffer)
+					if err != nil {
+						fmt.Println("Error reading from server:", err)
+						break
+					}
+					if n == 0 || io.EOF == err {
+						break
+					}
+					result = append(result, buffer[:n]...)
 				}
-				result = append(result, buffer[:n]...)
-				server.Close()
 				done <- true
 			}()
 
