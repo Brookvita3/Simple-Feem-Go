@@ -5,12 +5,11 @@ import (
 	config "file-transfer/configs"
 	"file-transfer/utils/utils"
 	"fmt"
-	"io"
 	"net"
 	"os"
 )
 
-func ReadFileChunks(filePath string, fileChannels utils.FileChannels, chunkSize int) {
+func ReadFileChunks(filePath string, fileChannels utils.FileChannels) {
 
 	_, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
@@ -25,22 +24,17 @@ func ReadFileChunks(filePath string, fileChannels utils.FileChannels, chunkSize 
 	}
 	defer file.Close()
 
-	reader := bufio.NewReaderSize(file, chunkSize)
-	for {
-		err := fileChannels.SendChunk(reader, chunkSize)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fileChannels.ErrorChan <- err
-			return
-		}
-	}
+	reader := bufio.NewReaderSize(file, fileChannels.ChunkSize)
+	fileChannels.ReadChunks(reader)
+
+	fmt.Println("Read Successfully")
 	close(fileChannels.DataChan)
 }
 
 func SendFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
+
 	defer conn.Close()
+
 	for chunk := range fileChannels.DataChan {
 		_, err := conn.Write(chunk)
 		if err != nil {
@@ -49,6 +43,7 @@ func SendFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
 			break
 		}
 	}
+
 	fmt.Println("Send Successfully")
 	close(fileChannels.ErrorChan)
 }
@@ -108,9 +103,10 @@ func StartClient(addr string) {
 	fileChannels := *utils.NewFileChannels(
 		make(chan []byte),
 		make(chan error),
+		config.Config.CHUNK_SIZE,
 	)
 
-	go ReadFileChunks(path, fileChannels, config.Config.CHUNK_SIZE)
+	go ReadFileChunks(path, fileChannels)
 	go SendFileChunks(conn, fileChannels)
 
 	for err := range fileChannels.ErrorChan {

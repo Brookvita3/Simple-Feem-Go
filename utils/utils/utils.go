@@ -3,6 +3,7 @@ package utils
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -46,20 +47,48 @@ func GetInput() string {
 type FileChannels struct {
 	DataChan  chan []byte
 	ErrorChan chan error
+	ChunkSize int
 }
 
-func (fileChannels *FileChannels) SendChunk(reader *bufio.Reader, chunkSize int) error {
-	chunk := make([]byte, chunkSize)
-	n, err := reader.Read(chunk)
-	if n > 0 {
-		fileChannels.DataChan <- chunk[:n]
+func (fileChannels *FileChannels) ReadChunks(reader *bufio.Reader) error {
+	for {
+		chunk := make([]byte, fileChannels.ChunkSize)
+		n, err := reader.Read(chunk)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fileChannels.ErrorChan <- err
+			return err
+		}
+		if n > 0 {
+			fileChannels.DataChan <- chunk[:n]
+		}
 	}
-	return err
+	return nil
 }
 
-func NewFileChannels(dataChan chan []byte, errorChan chan error) *FileChannels {
+func (fileChannels *FileChannels) WriteChunks(writer *bufio.Writer) error {
+	for chunk := range fileChannels.DataChan {
+		_, err := writer.Write(chunk)
+		if err != nil {
+			fileChannels.ErrorChan <- err
+			return err
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		fileChannels.ErrorChan <- err
+		return err
+	}
+
+	return nil
+}
+
+func NewFileChannels(dataChan chan []byte, errorChan chan error, chunkSize int) *FileChannels {
 	return &FileChannels{
 		DataChan:  dataChan,
 		ErrorChan: errorChan,
+		ChunkSize: chunkSize,
 	}
 }

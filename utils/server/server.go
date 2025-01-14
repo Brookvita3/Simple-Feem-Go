@@ -1,32 +1,40 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	config "file-transfer/configs"
 	"file-transfer/utils/utils"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
 )
 
 func ReceiveFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
+
 	defer conn.Close()
 
-	buffer := make([]byte, config.Config.CHUNK_SIZE)
 	for {
+		buffer := make([]byte, fileChannels.ChunkSize)
 		n, err := conn.Read(buffer)
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			fileChannels.ErrorChan <- err
 			break
 		}
 		fileChannels.DataChan <- buffer[:n]
 	}
-	close(fileChannels.DataChan)
 
+	fmt.Println("Receive Successfully")
+	close(fileChannels.DataChan)
 }
 
 func WriteFileChunks(filePath string, fileChannels utils.FileChannels) {
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		fileChannels.ErrorChan <- err
@@ -34,14 +42,11 @@ func WriteFileChunks(filePath string, fileChannels utils.FileChannels) {
 	}
 	defer file.Close()
 
-	for chunk := range fileChannels.DataChan {
-		_, err := file.Write(chunk)
-		if err != nil {
-			fileChannels.ErrorChan <- err
-			break
-		}
-	}
+	writter := bufio.NewWriterSize(file, fileChannels.ChunkSize)
+	fileChannels.WriteChunks(writter)
+
 	fmt.Println("Write Successfully")
+	close(fileChannels.ErrorChan)
 }
 
 func ListenForBroadCasts(ctx context.Context) error {
@@ -110,6 +115,7 @@ func StartServer() {
 		fileChannels := *utils.NewFileChannels(
 			make(chan []byte),
 			make(chan error),
+			config.Config.CHUNK_SIZE,
 		)
 
 		go ReceiveFileChunks(conn, fileChannels)
