@@ -9,6 +9,7 @@ import (
 
 type AppConfig struct {
 	CHUNK_SIZE     int
+	BUFFER_SIZE    int
 	BROADCAST_PORT string
 }
 
@@ -37,8 +38,14 @@ func LoadEnv() {
 		log.Fatal("Error parsing BROADCAST_PORT:", err)
 	}
 
+	bufferSize, err := strconv.ParseInt(os.Getenv("BUFFER_SIZE"), 10, 64)
+	if err != nil {
+		log.Fatal("Error parsing BUFFER_SIZE:", err)
+	}
+
 	Config = AppConfig{
 		CHUNK_SIZE:     int(chunkSize),
 		BROADCAST_PORT: strconv.FormatInt(broadcastPort, 10),
+		BUFFER_SIZE:    int(bufferSize),
 	}
 }

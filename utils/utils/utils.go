@@ -45,9 +45,10 @@ func GetInput() string {
 }
 
 type FileChannels struct {
-	DataChan  chan []byte
-	ErrorChan chan error
-	ChunkSize int
+	DataChan   chan []byte
+	ErrorChan  chan error
+	ChunkSize  int
+	BufferSize int
 }
 
 func (fileChannels *FileChannels) ReadChunks(reader *bufio.Reader) error {
@@ -85,10 +86,11 @@ func (fileChannels *FileChannels) WriteChunks(writer *bufio.Writer) error {
 	return nil
 }
 
-func NewFileChannels(dataChan chan []byte, errorChan chan error, chunkSize int) *FileChannels {
+func NewFileChannels(dataChan chan []byte, errorChan chan error, chunkSize int, bufferSize int) *FileChannels {
 	return &FileChannels{
-		DataChan:  dataChan,
-		ErrorChan: errorChan,
-		ChunkSize: chunkSize,
+		DataChan:   dataChan,
+		ErrorChan:  errorChan,
+		ChunkSize:  chunkSize,
+		BufferSize: bufferSize,
 	}
 }

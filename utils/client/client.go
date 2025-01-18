@@ -24,7 +24,7 @@ func ReadFileChunks(filePath string, fileChannels utils.FileChannels) {
 	}
 	defer file.Close()
 
-	reader := bufio.NewReaderSize(file, fileChannels.ChunkSize)
+	reader := bufio.NewReaderSize(file, fileChannels.BufferSize)
 	fileChannels.ReadChunks(reader)
 
 	fmt.Println("Read Successfully")
@@ -48,39 +48,24 @@ func SendFileChunks(conn net.Conn, fileChannels utils.FileChannels) {
 	close(fileChannels.ErrorChan)
 }
 
-// sendBroadcast sends a UDP broadcast message
-func SendBroadCasts() error {
-	broadcastAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:"+config.Config.BROADCAST_PORT)
-	fmt.Println("255.255.255.255:" + config.Config.BROADCAST_PORT)
-	if err != nil {
-		fmt.Println("Error resolving broadcast address:", err)
-		return err
-	}
+func sendFile(conn net.Conn, filePath string) {
+	fileChannels := *utils.NewFileChannels(
+		make(chan []byte),
+		make(chan error),
+		config.Config.CHUNK_SIZE,
+		config.Config.BUFFER_SIZE,
+	)
 
-	conn, err := net.DialUDP("udp", nil, broadcastAddr)
-	if err != nil {
-		fmt.Println("Error creating UDP connection:", err)
-		return err
-	}
-	defer conn.Close()
+	go ReadFileChunks(filePath, fileChannels)
+	go SendFileChunks(conn, fileChannels)
 
-	message, err := utils.GetLocalIP()
-	if err != nil {
-		fmt.Println("Error getting local IP:", err)
-		return err
+	for err := range fileChannels.ErrorChan {
+		fmt.Printf("Error: %v\n", err)
 	}
-
-	_, err = conn.Write([]byte(message))
-	if err != nil {
-		fmt.Println("Error sending broadcast message:", err)
-		return err
-	}
-
-	fmt.Println("Broadcast message sent:", message)
-	return nil
 }
 
 func StartClient(addr string) {
+
 	addr = fmt.Sprintf("%s:%d", addr, 8080)
 	conn, err := net.Dial("tcp", addr) // Example address and port
 	if err != nil {
@@ -99,17 +84,5 @@ func StartClient(addr string) {
 
 	// example send file
 	path := "../files/send/file1.pdf"
-
-	fileChannels := *utils.NewFileChannels(
-		make(chan []byte),
-		make(chan error),
-		config.Config.CHUNK_SIZE,
-	)
-
-	go ReadFileChunks(path, fileChannels)
-	go SendFileChunks(conn, fileChannels)
-
-	for err := range fileChannels.ErrorChan {
-		fmt.Printf("Error: %v\n", err)
-	}
+	sendFile(conn, path)
 }
