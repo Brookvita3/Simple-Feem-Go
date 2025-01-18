@@ -17,6 +17,7 @@ type testCase struct {
 	name       string
 	filePath   string
 	chunkSize  int
+	bufferSize int
 	wantError  bool
 	expected   []byte
 	errorCheck func(err error) bool
@@ -38,17 +39,19 @@ func TestReadFileChunks(t *testing.T) {
 
 	listTestCase := []testCase{
 		{
-			name:      "valid file read",
-			filePath:  tempFile.Name(),
-			chunkSize: 10,
-			wantError: false,
-			expected:  content,
+			name:       "valid file read",
+			filePath:   tempFile.Name(),
+			chunkSize:  10,
+			bufferSize: 10,
+			wantError:  false,
+			expected:   content,
 		},
 		{
-			name:      "file not found",
-			filePath:  "nonexistentfile.txt",
-			chunkSize: 10,
-			wantError: true,
+			name:       "file not found",
+			filePath:   "nonexistentfile.txt",
+			chunkSize:  10,
+			bufferSize: 10,
+			wantError:  true,
 			errorCheck: func(err error) bool {
 				return os.IsNotExist(err)
 			},
@@ -62,6 +65,7 @@ func TestReadFileChunks(t *testing.T) {
 				make(chan []byte),
 				make(chan error),
 				tc.chunkSize,
+				tc.bufferSize,
 			)
 
 			go clientUtils.ReadFileChunks(tc.filePath, fileChannels)
@@ -132,6 +136,7 @@ func TestSendFileChunks(t *testing.T) {
 				make(chan []byte, len(content)/tc.chunkSize),
 				make(chan error),
 				tc.chunkSize,
+				tc.bufferSize,
 			)
 
 			fileChannels.DataChan <- content
